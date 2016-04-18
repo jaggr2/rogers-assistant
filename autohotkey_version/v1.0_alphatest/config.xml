@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="Windows-1252" ?>
+<RogersAssistant>
+	<General AutoUpdate="0" ShowStartImage="0" Language="Deutsch" />
+	<Wikipedia Status="1" Shortcut="#w" URL="http://de.wikipedia.org/wiki/?search={suchbegriff}" />
+	<Google Status="1" Shortcut="#g" URL="http://google.ch/search?q={suchbegriff}" />
+	<Leo Status="1" Shortcut="#ü" URL="http://dict.leo.org/?search={suchbegriff}" />
+	<EasyOrdner Status="1">
+		<Item name="Eigene Dateien" path="{MyDocuments}" />
+		<Item name="Seperator" path="" />
+		<Item name="Programme" path="{ProgramFiles}" />
+	</EasyOrdner>
+	<Shortcuts Status="0">
+		<Shortcut name="Explorer" keys="#e" path="explorer" />
+	</Shortcuts>
+</RogersAssistant>

@@ -1,0 +1,3 @@
+not important Selbst defnierbare Hotsrings einbauen
+not important Automatisierungsdatenbank (ahk oder autoid scripte als exe)
+not important Bugtrackingsystem

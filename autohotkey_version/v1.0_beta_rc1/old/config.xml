@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="Windows-1252" ?>
+<rogersassistant>
+	<general autoupdate="yes" showstartimage="1" language="deutsch" />
+	<wikipedia status="on" shortcut="#w" url="http://de.wikipedia.org/wiki/?search={suchbegriff}" />
+	<google status="1" shortcut="#g" url="http://google.ch/search?q={suchbegriff}" />
+	<leo status="1" shortcut="#ü" url="http://dict.leo.org/?search={suchbegriff}" />
+	<easyordner status="1">
+		<item name="Eigene dateien" path="{MyDocuments}" />
+		<item name="seperator" path="" />
+		<item name="Programme" path="{Programfiles}" />
+	</easyordner>
+	<shortcuts status="1">
+		<shortcut name="explorer" keys="#e" path="explorer" />
+	</shortcuts>
+</rogersassistant>

@@ -1,0 +1,60 @@
+/* Rogers Stylesheet */
+
+body {
+background: #CCCCCC url(images/background.png) top center repeat-y;
+margin:0 auto;
+font:76% Verdana,Tahoma,Arial,sans-serif;
+padding: 0;
+}
+
+a {
+text-decoration: underline;
+color: #003366;
+}
+
+a:hover {
+color: #000000;
+}
+
+
+#all {
+background: #FFFFFF;
+margin:0 auto;
+width:760px;
+}
+
+#header {
+font-size: 9px;
+text-align: right;
+color: #666666;
+background: #CCCCCC url(images/logo.png) center center no-repeat;
+margin:0 auto;
+padding-right: 40px;
+width:800px;
+height:150px;
+}
+
+#navi {
+margin:0 auto;
+/*padding-left: 1px;*/
+width:784px;
+}
+
+#content {
+margin:0 auto;
+width:720px;
+}
+
+img {
+margin: 0;
+padding: 0;
+border: 0;
+}
+
+h1, h2, h3 {
+color: #003366;
+}
+
+.center {
+text-align: center;
+}

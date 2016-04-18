@@ -1,0 +1,1112 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; AutoHotkey Version: 1.0.44.04
+;; Language:       German
+;; Platform:       Windows XP
+;; Author:         Roger Jaggi <icefox90@bluewin.ch>
+;;
+;; Script Function:
+;;	A simple Assitant to make the Windows Life easier ;)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Konstants
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+#SingleInstance force
+#NoEnv
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+XMLRead(source, tree, default = "") { ; v2.0 - by Titan
+	If source is integer
+	{
+		hf := DllCall("ReadFile", UInt, source, Str, c, UInt, DllCall("GetFileSize", UInt, source, UInt, 0), UIntP, DllCall("SetFilePointer", UInt, source, UInt, 0, UInt, 0, UInt, 0), UInt, 0)
+	}
+	Else FileRead, c, %source%
+	StringGetPos, t, tree, @
+	If !ErrorLevel {
+		StringTrimLeft, a, tree, t + 1
+		StringLeft, tree, tree, t
+	}
+	xc := A_StringCaseSense
+	StringCaseSense, On
+	Loop, Parse, tree, .
+	{
+		e := A_LoopField
+		i = 1
+		StringGetPos, t, e, (
+		If !ErrorLevel {
+			StringMid, i, e, t + 2, InStr(e, ")") - t - 2
+			i++
+			StringLeft, e, e, t
+		}
+		StringReplace, c, c, <%e%>, <%e% >, A
+		StringReplace, c, c, <%e%/, <%e% /, A
+		ex := "<" . e . " "
+		n := A_Index
+		Loop {
+			StringTrimLeft, c, c, InStr(c, ex, 1) - 1
+			StringReplace, c, c, <, <, UseErrorLevel
+			t := ErrorLevel
+			StringReplace, c, c, />, />, UseErrorLevel
+			t -= ErrorLevel
+			StringReplace, c, c, </, </, UseErrorLevel
+			If (t - ErrorLevel * 2) * -1 - n < 0 or x
+				Break
+			Else StringTrimLeft, c, c, 1
+		}
+		StringGetPos, t, c, %ex%, L%i%
+		x += ErrorLevel
+		StringTrimLeft, c, c, t
+		t := InStr(c, "</" . e, 1)
+		IfNotEqual, t, 0, StringLeft, c, c, t + StrLen(e) + 2
+	}
+	If a {
+		x += !InStr(c, " " . a . "=", 1)
+		StringTrimLeft, c, c, InStr(c, a . "=", 1) + StrLen(a) + 1
+		StringReplace, c, c, ', ", A
+		StringLeft, c, c, InStr(c, """") - 1
+	} Else {
+		x += InStr(c, "/>") and InStr(c, "/>") < InStr(c, "</")
+		StringMid, c, c, InStr(c, ">") + 1, InStr(c, "</" . e . ">", 1) - 1 - InStr(c, ">")
+	}
+	StringCaseSense, %xc%
+	IfGreater, x, 0, SetEnv, c, %default%
+	Return, c
+}
+
+GetHotkeyString(stringtoparse)
+{
+	;StringUpper, stringtoparse, stringtoparse
+	StringReplace, stringtoparse, stringtoparse, %A_SPACE%, , All
+	StringReplace, stringtoparse, stringtoparse, %A_TAB%, , All
+	StringReplace, stringtoparse, stringtoparse, +, , All
+	StringReplace, stringtoparse, stringtoparse, SHIFT, +, All
+	;StringReplace, stringtoparse, stringtoparse, ALTGR, <^>!, All
+	StringReplace, stringtoparse, stringtoparse, WIN, #, All
+	StringReplace, stringtoparse, stringtoparse, ALT, !, All
+	StringReplace, stringtoparse, stringtoparse, CTRL, ^, All
+	;StringReplace, stringtoparse, stringtoparse, L, <, All
+	;StringReplace, stringtoparse, stringtoparse, R, >, All
+	return %stringtoparse%
+}
+
+ReplaceBuildInVars(stringtoparse)
+{
+	StringReplace, stringtoparse, stringtoparse, <WinDir>, %A_WinDir%, 1
+	StringReplace, stringtoparse, stringtoparse, <ProgramFiles>, %A_ProgramFiles%, 1
+	StringReplace, stringtoparse, stringtoparse, <AppData>, %A_AppData%, 1
+	StringReplace, stringtoparse, stringtoparse, <AppDataCommon>, %A_AppDataCommon%, 1
+	StringReplace, stringtoparse, stringtoparse, <Desktop>, %A_Desktop%, 1
+	StringReplace, stringtoparse, stringtoparse, <DesktopCommon>, %A_DesktopCommon%, 1
+	StringReplace, stringtoparse, stringtoparse, <MyDocuments>, %A_MyDocuments%, 1
+	StringReplace, stringtoparse, stringtoparse, <StartMenu>, %A_StartMenu%, 1
+	StringReplace, stringtoparse, stringtoparse, <StartMenuCommon>, %A_StartMenuCommon%, 1
+	StringReplace, stringtoparse, stringtoparse, <Programs>, %A_Programs%, 1
+	StringReplace, stringtoparse, stringtoparse, <ProgramsCommon>, %A_ProgramsCommon%, 1
+	StringReplace, stringtoparse, stringtoparse, <Startup>, %A_Startup%, 1
+	StringReplace, stringtoparse, stringtoparse, <StartupCommon>, %A_StartupCommon%, 1
+	return %stringtoparse%
+}
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Settings
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+IfExist, %A_AppData%\Rogers Assistant.ini
+{
+	usbmodus = 0
+	configfile = %A_AppData%\Rogers Assistant.ini
+}
+else IfExist, %A_ScriptDir%\Rogers Assistant.ini
+{
+	;usbmodus = 1
+	usbmodus = 0
+	configfile = %A_ScriptDir%\Rogers Assistant.ini
+}
+else
+{
+	;Neue Config Datei erstellen
+	MsgBox, Einstellungsdatei wurde nicht gefunden!
+	ExitApp
+	usbmodus = 0
+	configfile = %A_AppData%\Rogers Assistant.ini
+}
+ra_configfile = %A_ScriptDir%\config.xml
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Read INI Settings
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+/*
+RegRead, temp, HKEY_CURRENT_USER, SOFTWARE\Microsoft\Windows\CurrentVersion\Run, Rogers Assistant
+if temp <>
+{
+	ra_autostart = 1
+}
+else
+{
+	ra_autostart = 0
+}
+temp=
+IniRead, ra_autoupdate, %configfile%, Allgemein, AutoUpdate, 0
+IniRead, ra_zeigestartbild, %configfile%, Allgemein, ZeigeStartbild, 1
+IniRead, ra_sprache, %configfile%, Allgemein, Sprache, Deutsch
+
+IniRead, ra_shortcuts, %configfile%, Funktionen, Shortcuts, 0
+IniRead, ra_easyordner, %configfile%, Funktionen, EasyOrdner, 0
+IniRead, ra_wikipedia, %configfile%, Funktionen, Wikipedia, 0
+IniRead, ra_google, %configfile%, Funktionen, Google, 0
+IniRead, ra_leo, %configfile%, Funktionen, Leo, 0
+
+IniRead, ra_wikipediaurl, %configfile%, Wikipedia, URL, http://de.wikipedia.org/wiki/?search=<suchbegriff>
+IniRead, ra_googleurl, %configfile%, Google, URL, http://google.de/search?hl=de&meta=lr=lang_de&q=<suchbegriff>
+IniRead, ra_leourl, %configfile%, Leo, URL, http://dict.leo.org/?lp=ende&lang=de&search=<suchbegriff>
+*/
+
+GENERIC_READ = 0x80000000  ; Open the file for reading rather than writing.
+OPEN_EXISTING = 3  ; This mode indicates that the file to be opened must already exist.
+FILE_SHARE_READ = 0x1 ; Whether other processes can open the file while we have it open.
+FILE_SHARE_WRITE = 0x2
+ConfigFileHandle := DllCall("CreateFile", str, ra_configfile, UInt, GENERIC_READ, UInt, FILE_SHARE_READ|FILE_SHARE_WRITE, UInt, 0, UInt, OPEN_EXISTING, Uint, 0, UInt, 0)
+if not ConfigFileHandle
+{
+	MsgBox, Rogers Assistant, ERROR 101: Can't open "%ra_configfile%" for reading.
+	return
+}
+
+ra_autoupdate := XMLRead(ConfigFileHandle, "rogersassistant(0).general(0)@autoupdate")
+ra_zeigestartbild := XMLRead(ConfigFileHandle, "rogersassistant.general@showstartimage")
+ra_sprache := XMLRead(ConfigFileHandle, "rogersassistant.general@language")
+
+ra_wikipedia := XMLRead(ConfigFileHandle, "rogersassistant.wikipedia@status")
+ra_wikipediahotkey := XMLRead(ConfigFileHandle, "rogersassistant.wikipedia@shortcut")
+ra_wikipediaurl := XMLRead(ConfigFileHandle, "rogersassistant.wikipedia@url")
+
+
+ra_shortcuts := XMLRead(ConfigFileHandle, "rogersassistant.shortcuts@status")
+ra_easyordner := XMLRead(ConfigFileHandle, "rogersassistant.easyordner@status")
+
+
+
+ra_google := XMLRead(ConfigFileHandle, "rogersassistant.google@status")
+ra_googleurl := XMLRead(ConfigFileHandle, "rogersassistant.google@url")
+
+ra_leo := XMLRead(ConfigFileHandle, "rogersassistant.leo@status")
+ra_leourl := XMLRead(ConfigFileHandle, "rogersassistant.leo@url")
+
+DllCall("CloseHandle", UInt, ConfigFileHandle)  ; Close the file.
+
+
+ListVars
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Startsplash
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+if ra_zeigestartbild = 1
+{
+	SplashImage, logo.gif, B CWWhite
+}
+
+Sleep, 500000
+ExitApp
+
+/*
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Tray Menu
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+menu, tray, icon, raicon.ico
+menu, tray, Tip , Rogers Assistant 
+menu, tray, NoStandard
+
+menu, tray, add, Einstellungen, TrayOpen
+menu, tray, add
+menu, tray, add, Neustart, ProgramReload
+menu, tray, add, Beenden, Beenden
+
+menu, tray, Default, Einstellungen
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Hotkeys
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+if ra_leo = 1
+{
+	Hotkey, #ü, Leo
+}	
+if ra_google = 1
+{
+	Hotkey, #g, Google
+}
+if ra_wikipedia = 1
+{
+	Hotkey, #w, Wikipedia
+}
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GUI
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+Gui, Margin, 0, 0
+;Variante 1
+Gui, Add, Picture, w500 h50 x0 y0, %A_ScriptDir%\header.png
+Gui, Add, Button, h18 w60 x375 y51 gSaveSettings, Speichern
+Gui, Add, Button, h18 w60 x435 y51 gBeenden, Beenden
+;Variante 2
+;Gui, Add, Text, x5 y404 w200, Copyrights 2006 by Roger Jaggi
+;Gui, Add, Button, x254 y402 w80 h20 gSaveSettings, Speichern
+;Gui, Add, Button, x336 y402 w80 h20 gProgramReload, Neustart
+;Gui, Add, Button, x418 y402 w80 h20 gExitApp, Beenden
+Gui, Add, Tab, w500 h350 x0 y50 , Allgemein|Abkürzungstasten|EasyOrdner|Wikipedia|Google|Leo 
+
+
+Gui, Tab, Allgemein
+Gui, Add, GroupBox, x10 y80 w480 h95, Allgeimeine Infos
+Gui, Add, Text, w460 x20 y100, Rogers Assistant entwickelte Roger Jaggi mit dem Ziel, ein Tool zur komfortableren Handhabung des Betriebssystems Windows XP zu schaffen. Dazu wurden mehrere sinnvolle Funktionen kombiniert, die alle entweder ein- oder ausgeschaltet werden können. Feedback sowie Fehlermeldungen sind jederzeit willkommen und erwünscht. Weitere Infos sind unter Allgemein zu unterst zu finden.
+Gui, Add, GroupBox, x10 y190 w480 h85, Rogers Assistant Einstellungen
+Gui, Add, Text, x220 y230 cRed, <<<<< ToDo >>>>>
+Gui, Add, CheckBox, x20 y210 Checked%ra_autostart% vcs_autostart, Starte Rogers Assistant automatisch mit Windows
+Gui, Add, CheckBox, x20 y230 Checked%ra_autoupdate% vcs_autoupdate, Überprüfe automatisch auf Updates
+Gui, Add, CheckBox, x20 y250 Checked%ra_zeigestartbild% vcs_zeigestartbild, Zeige Startbild
+Gui, Add, Text, x330 y210, Sprache:
+Gui, Add, DropDownList, x330 y225 vcs_sprache, Deutsch||
+Gui, Add, GroupBox, x10 y290 w480 h100, Programminfos
+Gui, Add, Text, x20 y310, Autor:
+Gui, Add, Text, x20 y325, E-Mail:
+Gui, Add, Text, x20 y340, Homepage:
+Gui, Add, Text, x300 y310, Version:
+Gui, Add, Text, x300 y325, Lizenz:
+Gui, Add, Text, x175 y370, Copyrights 2006 by Roger Jaggi
+Gui, Add, Text, x90 y310, Roger Jaggi (Icefox)
+Gui, Add, Text, x90 y325, icefox90@bluewin.ch
+Gui, Add, Text, x90 y340 gAutorhomepage cBlue, http://www.rogerworld.ch
+Gui, Add, Text, x350 y310, 1.0.0.7 Beta
+Gui, Add, Text, x350 y325, Freeware
+
+Gui, Tab, Abkürzungstasten
+Gui, Add, GroupBox, w480 h95 x10 y80, Abkürzungstasten Info
+Gui, Add, Text, w460 x20 y100, Jegliche Anwendungen können mithilfe dieses Programmes per Abkürzungstasten gestartet werden. Bei Verwendung der Windowstaste ist anzumerken, dass dabei windowseigene Shortcuts überschrieben werden könnten, wie z.B Win+L zum Logoff.
+Gui, Add, CheckBox, x20 y150 Checked%ra_shortcuts% vcs_shortcuts, Abkürzungstasten aktivieren
+Gui, Add, ListView, x10 y180 w480 h185 r20 -Multi, Tastenkombination|Auszuführender Befehl
+Gui, Add, Button, x13  y370 w99 h23 gInsertNewShortcut, Neu
+Gui, Add, Button, x138 y370 w99 h23 gChangeShortcut, Bearbeiten
+Gui, Add, Button, x263 y370 w99 h23 gDeleteShortcut, Löschen
+Gui, Add, Button, x388 y370 w99 h23 gPasseColonsAnInhalt, Breite anpassen
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Special Ini Settings
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Funktion = keine
+AnzahlMenuItems = 0
+AnzahlShortcuts = 0
+eintragliste = 
+Loop, Read, %configfile%
+{
+	If A_LoopReadLine =
+	{
+		continue
+	}
+	
+	if Funktion = keine
+	{
+		IfInString, A_LoopReadLine, [EasyOrdner]
+		{
+			Funktion = EasyOrdner
+			continue
+		}
+		IfInString, A_LoopReadLine, [Shortcuts]
+		{
+			Funktion = Shortcuts
+			continue
+		}
+ 
+	}
+	else
+	{
+		IfInString, A_LoopReadLine, <EasyOrdnerEnde>
+		{
+			Funktion = keine
+			continue
+		}
+		IfInString, A_LoopReadLine, <ShortcutsEnde>
+		{
+			Funktion = keine
+			continue
+		}
+	}
+	
+	If Funktion = EasyOrdner
+	{
+		AnzahlMenuItems++
+		IfInString, A_LoopReadLine, Seperator
+		{
+			Menu, EasyOrdner, Add
+			eo_zeile1 = Seperator
+			eo_zeile2 =
+		}
+		else
+		{
+			StringSplit, eo_zeile, A_LoopReadLine, =
+			eo_zeile1 = %eo_zeile1%
+			eo_zeile2 = %eo_zeile2%
+			eo_temppfad := ReplaceBuildInVars(eo_zeile2)
+			Transform, eo_pfad%AnzahlMenuItems%, deref, %eo_temppfad%
+			Menu, EasyOrdner, Add, %eo_zeile1%, OpenEasyordnerAuswahl
+		}
+		currenteintragliste = %currenteintragliste%|%eo_zeile1%
+		StringTrimLeft, eintragname%AnzahlMenuItems%, eo_zeile1, 0
+		StringTrimLeft, eintragordner%AnzahlMenuItems%, eo_zeile2, 0		
+	}
+	else if Funktion = Shortcuts
+	{
+
+		AnzahlShortcuts++
+		StringSplit, sc_zeile, A_LoopReadLine, =
+		sc_zeile1 = %sc_zeile1%
+		sc_zeile2 = %sc_zeile2%
+		LV_Add("", sc_zeile1, sc_zeile2)
+		
+		if ra_shortcuts = 1
+		{
+			hotkeystring := GetHotkeyString(sc_zeile1)
+			StringTrimLeft, sc_listehotkey%AnzahlShortcuts%, hotkeystring, 0
+			Transform, sc_listerun%AnzahlShortcuts%, deref, %sc_zeile2%
+			Hotkey, %hotkeystring%, ExecuteShortcut
+			Hotkey, %hotkeystring%, On
+		}
+	}
+}
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; EasyOrdner
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+if AnzahlMenuItems <> 0
+{
+	StringTrimLeft, currenteintragliste, currenteintragliste, 1
+	if ra_easyordner = 1
+	{
+		Hotkey, ~MButton, ZeigeEasyordnerMenu
+	}
+}
+else
+{
+	currenteintragliste = |	
+}
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GUI Fortsetzung
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+Gui, Tab, EasyOrdner
+Gui, Add, GroupBox, w480 h95 x10 y80, EasyOrdner Info
+Gui, Add, Text, w460 x20 y100, Mit EasyOrdner erscheint per Klick mit dem Mausrädchen das EasyOrdnerMenü. In diesem kann man einen zu öffnenden Ordner auswählen. Dies funktioniert überall, speziell bei Öffnen, Speichern, usw. Dialogen, im Explorer und in der Konsole ist EasyOrdner sehr praktisch.
+Gui, Add, CheckBox, x20 y150 Checked%ra_easyordner% vcs_easyordner, EasyOrdner aktivieren
+Gui, Add, GroupBox, x10 y190 w235 h200, Menu-Einstellung
+Gui, Add, ListBox, x20 y207 w215 h150 vcs_eoeintrage gCurrentEasyOrdnerAnzeige AltSubmit, %currenteintragliste%
+Gui, Add, UpDown,  vcs_CurrentEasyOrdnerUpdownNr gEasyOrdnerSort, 0
+Gui, Add, Button, x20 y360 w60 gNeuerEasyOrdnerEintrag, Neu
+Gui, Add, Button, x80 y360 w95 gNeuerEasyOrdnerSeperator, Neuer Seperator
+Gui, Add, Button, x175 y360 w60 gEasyOrdnerEintragLoeschen, Löschen
+Gui, Add, GroupBox, x255 y190 w235 h200, Ausgewähltes Menuelement
+Gui, Add, Text, x265 y210, Eintragname:
+Gui, Add, Edit, x265 y225 w215 vcs_eintragname,
+Gui, Add, Text, x265 y260, Zu öffnender Ordner:
+Gui, Add, Edit, x265 y275 w215 vcs_eintragordner,
+Gui, Add, Button, x265 y310 w100 vcs_eintragbutton gEasyOrdnerEintragUpdaten, Eintrag sichern
+Gui, Add, Button, x375 y310 w105 vcs_variablebutten gVariabeleinfuegenOpen, Variabel einfügen
+Gui, Add, Text, x265 y340, Info zu Variabeln:
+Gui, Add, Text, x265 y355 w215, Variabeln wie z.B. `%Desktop`% enthalten immer den korrekten Pfad eines Ordners. 
+
+Gui, Tab, Wikipedia
+Gui, Add, GroupBox, w480 h95 x10 y80, Wikipedia Info
+Gui, Add, Text, w460 x20 y100, Mit dieser Funktion kann man per Shortcut (Windowstaste + W) einen Begriff online bei der freien Enzyklopädie Wikipedia nachschlagen. Dazu einfach ein Wort oder eine Textstelle markieren und den Shortcut (Windowstaste + W) drücken.
+Gui, Add, CheckBox, x20 y150 Checked%ra_wikipedia% vcs_wikipedia, Wikipediafunktion aktivieren
+Gui, Add, GroupBox, w480 h95 x10 y190, URL-Einstellung
+Gui, Add, Text, w460 x20 y210, Zur Einstellung der richtigen URL hier einfach die Adresse der Wikipediasuchmaschine eingeben und statt einen Suchbegriff die Variable <suchbegriff> nehmen.
+Gui, Add, Text, x20 y253 w30, URL:
+Gui, Add, Edit, x50 y250 w410 vcs_wikipediaurl, %ra_wikipediaurl%
+Gui, Add, GroupBox, w480 h75 x10 y300, Test
+Gui, Add, Text, w460 x20 y320, Zum Testen der richtigen URL kann mit diesem Knopf eine Testsuche gestartet werden. 
+Gui, Add, Button, x20 y340 w460 gWikipedia, Zum Starten der Testsuche klicken
+
+
+Gui, Tab, Google
+Gui, Add, GroupBox, w480 h95 x10 y80, Google Info
+Gui, Add, Text, w460 x20 y100, Mit dieser Funktion kann man per Shortcut (Windowstaste + G) nach einem Begriff online bei der Suchmaschine Google suchen. Dazu einfach ein Wort oder eine Textstelle markieren und den Shortcut (Windowstaste + G) drücken.
+Gui, Add, CheckBox, x20 y150 Checked%ra_google% vcs_google, Googlefunktion aktivieren
+Gui, Add, GroupBox, w480 h95 x10 y190, URL-Einstellung
+Gui, Add, Text, w460 x20 y210, Zur Einstellung der richtigen URL hier einfach die Adresse der Googlesuchmaschine eingeben und statt einen Suchbegriff die Variable <suchbegriff> nehmen.
+Gui, Add, Text, x20 y253 w30, URL:
+Gui, Add, Edit, x50 y250 w410 vcs_googleurl, %ra_googleurl%
+Gui, Add, GroupBox, w480 h75 x10 y300, Test
+Gui, Add, Text, w460 x20 y320, Zum Testen der richtigen URL kann mit diesem Knopf eine Testsuche gestartet werden. 
+Gui, Add, Button, x20 y340 w460 gGoogle, Zum Starten der Testsuche klicken
+
+Gui, Tab, Leo
+Gui, Add, GroupBox, w480 h95 x10 y80, Leo Info
+Gui, Add, Text, w460 x20 y100, Mit dieser Funktion kann man per Shortcut (Windowstaste + Ü) einen Begriff online beim Übersetzungsduden namens Leo der Universität München übersetzen. Dazu einfach ein Wort oder ein Textstelle markieren und den Shortcut (Windowstaste + Ü) drücken.
+Gui, Add, CheckBox, x20 y150 Checked%ra_leo% vcs_leo, Leofunktion aktivieren
+Gui, Add, GroupBox, w480 h95 x10 y190, URL-Einstellung
+Gui, Add, Text, w460 x20 y210, Zur Einstellung der richtigen URL hier einfach die Adresse der Leo-Übersetzungssuche eingeben und statt einen Suchbegriff die Variable <suchbegriff> nehmen.
+Gui, Add, Text, x20 y253 w30, URL:
+Gui, Add, Edit, x50 y250 w410 vcs_leourl, %ra_leourl%
+Gui, Add, GroupBox, w480 h75 x10 y300, Test
+Gui, Add, Text, w460 x20 y320, Zum Testen der richtigen URL kann mit diesem Knopf eine Testsuche gestartet werden. 
+Gui, Add, Button, x20 y340 w460 gLeo, Zum Starten der Testsuche klicken
+
+Gui, Show, w500 h400 center hide, Rogers Assistant Einstellungen
+
+
+Gui, 2:+owner
+Gui, 2:Margin, 0, 0
+Gui, 2:Add, GroupBox, w150 h60 x5 y5, Info
+Gui, 2:Add, Text, w130 x15 y20, Per Verweilen über der Variable wird ihr aktueller Wert angezeigt.
+Gui, 2:Add, GroupBox, w150 h225 x5 y70, Variabeln
+Gui, 2:Font, underline cBlue
+Gui, 2:Add, Text, w130 h15 x20 y90  gEasyOrdnerVariableWinDir, <WinDir>
+Gui, 2:Add, Text, w130 h15 x20 y105 gEasyOrdnerVariableProgramFiles, <ProgramFiles>
+Gui, 2:Add, Text, w130 h15 x20 y120 gEasyOrdnerVariableAppData, <AppData>
+Gui, 2:Add, Text, w130 h15 x20 y135 gEasyOrdnerVariableAppDataCommon, <AppDataCommon>
+Gui, 2:Add, Text, w130 h15 x20 y150 gEasyOrdnerVariableDesktop, <Desktop>
+Gui, 2:Add, Text, w130 h15 x20 y165 gEasyOrdnerVariableDesktopCommon, <DesktopCommon>
+Gui, 2:Add, Text, w130 h15 x20 y180 gEasyOrdnerVariableMyDocuments, <MyDocuments>
+Gui, 2:Add, Text, w130 h15 x20 y195 gEasyOrdnerVariableStartMenu, <StartMenu>
+Gui, 2:Add, Text, w130 h15 x20 y210 gEasyOrdnerVariableStartMenuCommon, <StartMenuCommon>
+Gui, 2:Add, Text, w130 h15 x20 y225 gEasyOrdnerVariablePrograms, <Programs>
+Gui, 2:Add, Text, w130 h15 x20 y240 gEasyOrdnerVariableProgramsCommon, <ProgramsCommon>
+Gui, 2:Add, Text, w130 h15 x20 y255 gEasyOrdnerVariableStartup, <Startup>
+Gui, 2:Add, Text, w130 h15 x20 y270 gEasyOrdnerVariableStartupCommon, <StartupCommon>
+Gui, 2:Font, normal cBlack
+Gui, 2:Show, w160 h300 center hide, Variabeln
+
+Gui, 3:+owner
+Gui, 3:Margin, 0, 0
+Gui, 3:Add, GroupBox, w260 h135 x5 y5, Eintrag Details
+Gui, 3:Add, Text, w240 x15 y25, Tastenkombination:
+Gui, 3:Add, Checkbox, w40 x15 y45 vcs_keycombinationshift, Shift
+Gui, 3:Add, Text, w5 x60 y45, +
+Gui, 3:Add, Checkbox, w35 x75 y45 vcs_keycombinationctrl, Ctrl
+Gui, 3:Add, Text, w5 x115 y45, +
+Gui, 3:Add, Checkbox, w33 x130 y45 vcs_keycombinationalt, Alt
+Gui, 3:Add, Text, w5 x165 y45, +
+Gui, 3:Add, Checkbox, w35 x180 y45 vcs_keycombinationwin, Win
+Gui, 3:Add, Text, w5 x225 y45, +
+Gui, 3:Add, Edit, w15 x240 y42 Limit1 Uppercase vcs_keycombinationletter,
+Gui, 3:Add, Text, w240 x15 y70, Zu ausführender Befehl:
+Gui, 3:Add, Edit, w240 x15 y85 vcs_runcommand,
+Gui, 3:Add, Button, x15 y107 gShortcutDurchsuchenDialog, Durchsuchen...
+Gui, 3:Add, Button, x5 y150 w260 gSubmitShortcutChange, Eintrag sichern und Fenster schliessen
+Gui, 3:Show, w270 h180 center hide, Shortcuts
+
+if usbmodus = 1
+{
+	GuiControl, Disable, cs_autostart
+}
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Check for updates
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+if ra_autoupdate = 1
+{
+	;Überprüfe auf Updates
+}
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Hauptprogrammende
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GoSub, CurrentEasyOrdnerAnzeige
+Sleep, 1000
+SplashImage, Off
+return
+
+;#########################################################################################
+;##  Labels
+;#########################################################################################
+Default:
+return
+
+;----------------
+GuiClose:
+Gui, Cancel
+return
+
+TrayOpen:
+Gui, Restore
+return
+
+Beenden:
+ExitApp
+return
+
+VariabeleinfuegenOpen:
+Gui, 2:Restore
+return
+
+VariabeleinfuegenClose:
+Gui, 2:Cancel
+return
+
+ExecuteShortcut:
+Loop, %AnzahlShortcuts%
+{
+	StringTrimLeft, currentshortcut, sc_listehotkey%A_Index%, 0
+	if currentshortcut = %A_ThisHotkey%
+	{
+		StringTrimLeft, exefile, sc_listerun%A_Index%, 0
+		IfExist %exefile%
+		{
+			Run, %exefile%,, UseErrorLevel
+		}
+		else
+		{
+			MsgBox, 0, Rogers Assistant Error, Dateipfad ungültig: %exefile%
+		}
+	}
+}
+return
+
+InsertNewShortcut:
+LV_Add("Select Focus", "", "Neuer Eintrag") 
+return
+
+DeleteShortcut:
+linenumber := LV_GetNext("" , "Focused")
+LV_Delete(linenumber)
+return
+
+ChangeShortcut:
+Gui, 3:Cancel
+linenumber := LV_GetNext("" , "Focused")
+editedlinenumber = %linenumber%
+LV_GetText(currentkeycombination, linenumber, 1)
+LV_GetText(currentruncommand, linenumber, 2)
+currentkeycombination := GetHotkeyString(currentkeycombination)
+GuiControl, 3: ,cs_keycombinationshift, 0
+GuiControl, 3: ,cs_keycombinationctrl, 0
+GuiControl, 3: ,cs_keycombinationalt, 0
+GuiControl, 3: ,cs_keycombinationwin, 0
+Loop, Parse, currentkeycombination
+{
+	If A_LoopField = +
+	{
+		GuiControl, 3: ,cs_keycombinationshift, 1
+	}
+	else If A_LoopField = ^
+	{
+		GuiControl, 3: ,cs_keycombinationctrl, 1
+	}
+	else If A_LoopField = !
+	{
+		GuiControl, 3: ,cs_keycombinationalt, 1
+	}
+	else If A_LoopField = #
+	{
+		GuiControl, 3: ,cs_keycombinationwin, 1
+	}
+}
+StringRight, currentkeycombinationletter, currentkeycombination, 1
+GuiControl, 3: ,cs_keycombinationletter, %currentkeycombinationletter%
+GuiControl, 3: ,cs_runcommand, %currentruncommand% 
+Gui, 3:Restore
+return
+
+ShortcutDurchsuchenDialog:
+GuiControlGet, currentvalue,3: ,cs_runcommand
+If currentvalue <>
+{
+	IfInString, currentvalue, Neuer Eintrag
+	{
+		durchsuchendir = %A_ProgramFiles%
+	}
+	else
+	{
+		durchsuchendir = %currentvalue%
+	}
+}
+else{
+	durchsuchendir = %A_ProgramFiles%
+}
+
+FileSelectFile, durchsuchenfile, 3, %durchsuchendir%, Ausführbare Datei auswählen`, um deren Pfad einzufügen., Ausführbare Dateien (*.exe; *.bat; *.cmd)
+if durchsuchenfile <>
+{
+	GuiControl, 3: ,cs_runcommand, %durchsuchenfile% 
+}
+return
+
+SubmitShortcutChange:
+GuiControlGet, currentkcomshift, 3: ,cs_keycombinationshift
+GuiControlGet, currentkcomctrl, 3: ,cs_keycombinationctrl
+GuiControlGet, currentkcomalt, 3: ,cs_keycombinationalt
+GuiControlGet, currentkcomwin, 3: ,cs_keycombinationwin
+GuiControlGet, currentkcomletter, 3: ,cs_keycombinationletter
+GuiControlGet, currentruncommand, 3: ,cs_runcommand
+currentkcom=
+If currentkcomshift = 1
+{
+	currentkcom = %currentkcom% Shift +
+}
+If currentkcomctrl = 1
+{
+	currentkcom = %currentkcom% Ctrl +
+}
+If currentkcomalt = 1
+{
+	currentkcom = %currentkcom% Alt +
+}
+If currentkcomwin = 1
+{
+	currentkcom = %currentkcom% Win +
+}
+currentkcom = %currentkcom% %currentkcomletter%
+if editedlinenumber <>
+{
+	if StrLen(currentkcom) > 1
+	{
+		if currentkcomletter <>
+		{
+			if currentruncommand <>
+			{
+				Gui, 3:Cancel
+				Gui, 1:Default
+				LV_Modify(editedlinenumber, "", currentkcom, currentruncommand)
+			}
+			else{
+				MsgBox, 0, Rogers Assistant Eingabefehler, Es muss einen auszuführenden Befehl geben!				
+			}
+		}
+		else
+		{	
+			MsgBox, 0, Rogers Assistant Eingabefehler, Die Tastenkombination muss am Schluss einen Buchstaben oder eine Zahl haben!
+		}
+	}
+	else
+	{
+		MsgBox, 0, Rogers Assistant Eingabefehler, Es muss mindestens 1 Zusatztaste (Shift, Ctrl, ...) aktiviert werden!
+	}
+}
+currentkcom=
+return
+
+PasseColonsAnInhalt:
+Gui, 1:Default
+LV_ModifyCol()
+return
+
+ZeigeEasyordnerMenu:
+	WinGet, eo_window_id, ID, A
+	WinGetClass, eo_class, ahk_id %eo_window_id%
+	ControlGetPos, eo_Edit1Pos,,,, Edit1, ahk_id %eo_window_id%
+	if eo_class = MozillaUIWindowClass
+	{
+		return
+	}
+	Menu, EasyOrdner, show
+return
+
+OpenEasyordnerAuswahl:
+StringTrimLeft, eo_path, eo_pfad%A_ThisMenuItemPos%, 0
+if eo_path =
+{
+	return
+}
+if eo_class = #32770  ;Dialog.
+{
+	if eo_Edit1Pos <>
+	{
+		WinActivate ahk_id %eo_window_id%
+		ControlGetText, eo_text, Edit1, ahk_id %eo_window_id%
+		ControlSetText, Edit1, %eo_path%, ahk_id %eo_window_id%
+		ControlSend, Edit1, {Enter}, ahk_id %eo_window_id%
+		Sleep, 100
+		ControlSetText, Edit1, %eo_text%, ahk_id %eo_window_id%
+		return
+	}
+}
+else if eo_class in ExploreWClass,CabinetWClass  ;Explorer.
+{
+	if eo_Edit1Pos <>
+	{
+		ControlSetText, Edit1, %eo_path%, ahk_id %eo_window_id%
+		ControlSend, Edit1, {Right}{Enter}, ahk_id %eo_window_id%
+		return
+	}
+}
+else if eo_class = ConsoleWindowClass ;Console
+{
+	WinActivate, ahk_id %eo_window_id%
+	SetKeyDelay, 0
+	IfInString, eo_path, :
+	{
+		StringLeft, eo_path_drive, eo_path, 1
+		Send %eo_path_drive%:{enter}
+	}
+	Send, cd %eo_path%{Enter}
+	return
+}
+else if eo_class = TTOTAL_CMD
+{
+	WinActivate, ahk_id %eo_window_id%
+	;return
+}
+Run, Explorer %eo_path%
+return
+
+CurrentEasyOrdnerAnzeige:
+letzteeintragnr = %currenteintragnr%
+GuiControlGet, currenteintragnr, ,cs_eoeintrage
+GuiControl, Enable, cs_eintragname
+GuiControl, Enable, cs_eintragordner
+GuiControl, Enable, cs_eintragbutton
+GuiControl, Enable, cs_variablebutten
+StringTrimLeft, eintragname, eintragname%currenteintragnr%, 0
+StringTrimLeft, eintragordner, eintragordner%currenteintragnr%, 0
+GuiControl, ,cs_eintragname, %eintragname%
+GuiControl, ,cs_eintragordner, %eintragordner%
+if eintragname = Seperator
+{
+	GuiControl, Disable, cs_eintragname
+	GuiControl, Disable, cs_eintragordner
+	GuiControl, Disable, cs_eintragbutton
+	GuiControl, Disable, cs_variablebutten
+}
+currenteintragname = %eintragname%
+return
+
+EasyOrdnerEintragUpdaten:
+GuiControlGet, currenteintragnr, ,cs_eoeintrage
+if currenteintragnr <>
+{
+	GuiControlGet, eintragname, , cs_eintragname 
+	if eintragname <>
+	{
+		GuiControlGet, eintragordner, , cs_eintragordner
+		StringTrimLeft, eintragname%currenteintragnr%, eintragname, 0
+		StringTrimLeft, eintragordner%currenteintragnr%, eintragordner, 0
+		neueeintragliste=
+		Loop, Parse, currenteintragliste, |
+		{
+			if currenteintragnr = %A_Index%
+			{
+				neueeintragliste = %neueeintragliste%|%eintragname%
+			}
+			else
+			{
+				neueeintragliste = %neueeintragliste%|%A_LoopField%
+			}
+		}
+		StringTrimLeft, currenteintragliste, neueeintragliste, 1
+		neueeintragliste=
+		GuiControl, , cs_eoeintrage, |
+		GuiControl, , cs_eoeintrage, %currenteintragliste%
+		GuiControl, Choose, cs_eoeintrage, %currenteintragnr%
+		GoSub, CurrentEasyOrdnerAnzeige
+	}
+}
+return
+
+NeuerEasyOrdnerEintrag:
+neuereintragname = Neuer Eintrag
+neuereintragordner = C:\
+GoSub, EasyOrdnerEintragProzedur
+return
+
+NeuerEasyOrdnerSeperator:
+neuereintragname = Seperator
+neuereintragordner =
+GoSub, EasyOrdnerEintragProzedur
+return
+
+EasyOrdnerEintragProzedur:
+GuiControlGet, currenteintragnr, ,cs_eoeintrage
+if currenteintragnr <>
+{
+	AnzahlMenuItems++
+	i=0
+	Loop, Parse, currenteintragliste, |
+	{
+		i++
+		if currenteintragnr = %A_Index%
+		{
+			StringTrimLeft, tempeintragname%i%, neuereintragname, 0
+			StringTrimLeft, tempeintragordner%i%, neuereintragordner, 0
+			i++
+		}
+		StringTrimLeft, tempeintragname%i%, eintragname%A_Index%, 0
+		StringTrimLeft, tempeintragordner%i%, eintragordner%A_Index%, 0
+	}
+	neueeintragliste=
+	Loop, %AnzahlMenuItems%
+	{
+		StringTrimLeft, eintragname, tempeintragname%A_Index%, 0
+		StringTrimLeft, eintragname%A_Index%, tempeintragname%A_Index%, 0
+		StringTrimLeft, eintragordner%A_Index%, tempeintragordner%A_Index%, 0
+		neueeintragliste = %neueeintragliste%|%eintragname%
+	}
+	StringTrimLeft, currenteintragliste, neueeintragliste, 1
+	neueeintragliste=
+	GuiControl, , cs_eoeintrage, |
+	GuiControl, , cs_eoeintrage, %currenteintragliste%
+	GuiControl, Choose, cs_eoeintrage, %currenteintragnr%
+	GoSub, CurrentEasyOrdnerAnzeige
+}
+return
+
+
+EasyOrdnerEintragLoeschen:
+GuiControlGet, currenteintragnr, ,cs_eoeintrage
+if currenteintragnr <>
+{
+	AnzahlMenuItems--
+	i=0
+	neueeintragliste =
+	Loop, Parse, currenteintragliste, |
+	{
+		if currenteintragnr = %A_Index%
+		{
+			continue
+		}
+		i++
+		neueeintragliste = %neueeintragliste%|%A_LoopField%
+		StringTrimLeft, tempeintragname%i%, eintragname%A_Index%, 0
+		StringTrimLeft, tempeintragordner%i%, eintragordner%A_Index%, 0
+	}
+	StringTrimLeft, currenteintragliste, neueeintragliste, 1
+	neueeintragliste=
+	Loop, %AnzahlMenuItems%
+	{
+		StringTrimLeft, eintragname%A_Index%, tempeintragname%A_Index%, 0
+		StringTrimLeft, eintragordner%A_Index%, tempeintragordner%A_Index%, 0
+	}
+	GuiControl, , cs_eoeintrage, |
+	GuiControl, , cs_eoeintrage, %currenteintragliste%
+}
+return
+
+EasyOrdnerSort:
+ungueltig = 0
+GuiControlGet, currenteintragnr, ,cs_eoeintrage
+if currenteintragnr <>
+{
+	if letzteeintragnr <>
+	{
+		nachunten := currenteintragnr - letzteeintragnr
+		nachoben :=  letzteeintragnr - currenteintragnr
+
+		if nachunten = 1
+		{
+			Loop, Parse, currenteintragliste, |
+			{
+				tempnummer = %A_Index%
+				if letzteeintragnr = %A_Index%
+				{
+					tempnummer++
+				}
+				else if currenteintragnr = %A_Index%
+				{
+					tempnummer--
+				}
+				StringTrimLeft, tempeintragname%A_Index%, eintragname%tempnummer%, 0
+				StringTrimLeft, tempeintragordner%A_Index%, eintragordner%tempnummer%, 0		
+			}
+		}
+		else if nachoben = 1
+		{
+			Loop, Parse, currenteintragliste, |
+			{
+				tempnummer = %A_Index%
+				if currenteintragnr = %A_Index%
+				{
+					tempnummer++
+				}
+				else if letzteeintragnr = %A_Index%
+				{
+					tempnummer--
+				}
+				StringTrimLeft, tempeintragname%A_Index%, eintragname%tempnummer%, 0
+				StringTrimLeft, tempeintragordner%A_Index%, eintragordner%tempnummer%, 0		
+			}
+		}
+		else{
+			ungueltig = 1
+		}
+
+		if ungueltig <> 1
+		{
+			neueeintragliste=
+			Loop, %AnzahlMenuItems%
+			{
+				StringTrimLeft, currenteintragname, tempeintragname%A_Index%, 0
+				StringTrimLeft, eintragname%A_Index%, tempeintragname%A_Index%, 0
+				StringTrimLeft, eintragordner%A_Index%, tempeintragordner%A_Index%, 0
+				neueeintragliste = %neueeintragliste%|%currenteintragname%
+			}
+			StringTrimLeft, currenteintragliste, neueeintragliste, 1
+			GuiControl, , cs_eoeintrage, |
+			GuiControl, , cs_eoeintrage, %currenteintragliste%
+			letzteeintragnr = %currenteintragnr%
+		}
+		GuiControl, Choose, cs_eoeintrage, %currenteintragnr%
+		GoSub, CurrentEasyOrdnerAnzeige
+	}
+}
+return
+
+EasyOrdnerVariableWinDir:
+GuiControl, 1: , cs_eintragordner, <WinDir>
+GoSub, VariabeleinfuegenClose
+return
+
+EasyOrdnerVariableProgramFiles:
+GuiControl, 1: , cs_eintragordner, <ProgramFiles>
+GoSub, VariabeleinfuegenClose
+return
+
+EasyOrdnerVariableAppData:
+GuiControl, 1: , cs_eintragordner, <AppData>
+GoSub, VariabeleinfuegenClose
+return
+
+EasyOrdnerVariableAppDataCommon:
+GuiControl, 1: , cs_eintragordner, <AppDataCommon>
+GoSub, VariabeleinfuegenClose
+return
+
+EasyOrdnerVariableDesktop:
+GuiControl, 1: , cs_eintragordner, <Desktop>
+GoSub, VariabeleinfuegenClose
+return
+
+EasyOrdnerVariableDesktopCommon:
+GuiControl, 1: , cs_eintragordner, <DesktopCommon>
+GoSub, VariabeleinfuegenClose
+return
+
+EasyOrdnerVariableMyDocuments:
+GuiControl, 1: , cs_eintragordner, <MyDocuments>
+GoSub, VariabeleinfuegenClose
+return
+
+EasyOrdnerVariableStartMenu:
+GuiControl, 1: , cs_eintragordner, <StartMenu>
+GoSub, VariabeleinfuegenClose
+return
+
+EasyOrdnerVariableStartMenuCommon:
+GuiControl, 1: , cs_eintragordner, <StartMenuCommon>
+GoSub, VariabeleinfuegenClose
+return
+
+EasyOrdnerVariablePrograms:
+GuiControl, 1: , cs_eintragordner, <Programs>
+GoSub, VariabeleinfuegenClose
+return
+
+EasyOrdnerVariableProgramsCommon:
+GuiControl, 1: , cs_eintragordner, <ProgramsCommon>
+GoSub, VariabeleinfuegenClose
+return
+
+EasyOrdnerVariableStartup:
+GuiControl, 1: , cs_eintragordner, <Startup>
+GoSub, VariabeleinfuegenClose
+return
+
+EasyOrdnerVariableStartupCommon:
+GuiControl, 1: , cs_eintragordner, <StartupCommon>
+GoSub, VariabeleinfuegenClose
+return
+
+SearchSomething:
+clipcontent =
+ClipBackup := ClipboardAll
+Clipboard =
+Send, ^c
+ClipWait, 0.5
+suchbegriff := Clipboard
+Clipboard := ClipBackup
+ClipBackup =
+suchbegriff = %suchbegriff%
+If suchbegriff =
+{
+	Inputbox, suchbegriff , Rogers Assistant, Bitte Suchbegriff eingeben:, , 300, 140
+	If ErrorLevel <> 0
+	{
+		return
+	}
+}
+StringReplace, command, currenturl, <suchbegriff>, %suchbegriff%, 1
+Run, %command%
+suchbegriff=
+command=
+return
+
+Leo:
+currenturl = %ra_leourl%
+GoSub, SearchSomething
+return
+
+Wikipedia:
+currenturl = %ra_wikipediaurl%
+GoSub, SearchSomething
+return
+
+Google:
+currenturl = %ra_googleurl%
+GoSub, SearchSomething
+return
+
+Autorhomepage:
+Run, http://www.rogerworld.ch
+return
+
+SaveSettings:
+Gui, Submit, NoHide
+FileDelete, %configfile%
+if usbmodus <> 1
+{
+	RegDelete, HKEY_CURRENT_USER, SOFTWARE\Microsoft\Windows\CurrentVersion\Run, Rogers Assistant
+	if cs_autostart = 1
+	{
+		RegWrite, REG_SZ, HKEY_CURRENT_USER, SOFTWARE\Microsoft\Windows\CurrentVersion\Run, Rogers Assistant, %A_ScriptFullPath%
+	}
+}
+
+FileAppend, `;Rogers Assistant Config File, %configfile%
+FileAppend, `;Don't change anything in this file, %configfile%
+IniWrite, %cs_autoupdate%, %configfile%, Allgemein, AutoUpdate
+IniWrite, %cs_zeigestartbild%, %configfile%, Allgemein, ZeigeStartbild
+IniWrite, %cs_sprache%, %configfile%, Allgemein, Sprache
+
+IniWrite, %cs_shortcuts%, %configfile%, Funktionen, Shortcuts
+IniWrite, %cs_easyordner%, %configfile%, Funktionen, EasyOrdner
+IniWrite, %cs_wikipedia%, %configfile%, Funktionen, Wikipedia
+IniWrite, %cs_google%, %configfile%, Funktionen, Google
+IniWrite, %cs_leo%, %configfile%, Funktionen, Leo
+
+IniWrite, %cs_wikipediaurl%, %configfile%, Wikipedia, URL
+IniWrite, %cs_googleurl%, %configfile%, Google, URL
+IniWrite, %cs_leourl%, %configfile%, Leo, URL
+FileAppend, `n[EasyOrdner], %configfile%
+Loop, %AnzahlMenuItems%
+{
+	StringTrimLeft, eintragname, eintragname%A_Index%, 0
+	StringTrimLeft, eintragordner, eintragordner%A_Index%, 0	
+	if eintragname <>
+	{
+		FileAppend, `n%eintragname%=%eintragordner%, %configfile%
+	}
+}
+FileAppend, `n<EasyOrdnerEnde>= , %configfile%
+FileAppend, `n[Shortcuts], %configfile%
+tempanz := LV_GetCount()
+Loop %tempanz% 
+{
+	LV_GetText(currentkeycombination, A_Index, 1)
+	LV_GetText(currentruncommand, A_Index, 2)
+	FileAppend, `n%currentkeycombination%=%currentruncommand%, %configfile%
+}
+FileAppend, `n<ShortcutsEnde>= , %configfile%
+return
+
+ProgramReload:
+Reload
+Sleep, 1000
+MsgBox, 0, Rogers Assistant Error, Rogers Assistant konnte nicht neu gestartet werden. Wird nun beendet.
+ExitApp
+return
